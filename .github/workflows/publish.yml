@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/zeekr_ev_api
+      url: https://pypi.org/p/zeekr-ev-api
     permissions:
       id-token: write
     steps:
