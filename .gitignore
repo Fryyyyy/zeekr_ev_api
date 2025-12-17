@@ -209,3 +209,5 @@ __marimo__/
 scratch/*
 
 tests/*
+
+const.py
