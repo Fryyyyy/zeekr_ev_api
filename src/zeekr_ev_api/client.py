@@ -1,6 +1,7 @@
 """
 Zeekr EV API Client
 """
+
 import base64
 import json
 from typing import Any
@@ -25,22 +26,40 @@ class ZeekrClient:
     A client for the Zeekr EV API.
     """
 
-    def __init__(self,
-                 username: str | None = None,
-                 password: str | None = None,
-                 country_code: str = "AU",
-                 session_data: dict | None = None) -> None:
+    def __init__(
+        self,
+        username: str | None = None,
+        password: str | None = None,
+        country_code: str = "AU",
+        hmac_access_key: str = "",
+        hmac_secret_key: str = "",
+        password_public_key: str = "",
+        prod_secret: str = "",
+        vin_key: str = "",
+        vin_iv: str = "",
+        session_data: dict | None = None,
+    ) -> None:
         """
         Initializes the client.
         """
         self.session: requests.Session = requests.Session()
         self.password: str | None = password
+
+        # Set up secrets
+        const.HMAC_ACCESS_KEY = hmac_access_key
+        const.HMAC_SECRET_KEY = hmac_secret_key
+        const.PASSWORD_PUBLIC_KEY = password_public_key
+        const.PROD_SECRET = prod_secret
+        const.VIN_KEY = vin_key
+        const.VIN_IV = vin_iv
+
         if session_data:
             self.load_session(session_data)
         else:
             if not username or not password:
                 raise ValueError(
-                    "Username and password are required for a new session.")
+                    "Username and password are required for a new session."
+                )
             self.username: str = username
             self.country_code: str = country_code
             self.logged_in: bool = False
@@ -48,7 +67,7 @@ class ZeekrClient:
             self.bearer_token: str | None = None
             self.user_info: dict = {}
             self.vin: str | None = None
-            self.vehicles: list['Vehicle'] = []
+            self.vehicles: list["Vehicle"] = []
 
             # These will be populated during login
             self.app_server_host: str = const.APP_SERVER_HOST
@@ -69,7 +88,7 @@ class ZeekrClient:
         self.message_host = session_data.get("message_host")
         self.region_code = session_data.get("region_code")
         self.region_login_server = session_data.get("region_login_server")
-        self.vehicles: list['Vehicle'] = []
+        self.vehicles: list["Vehicle"] = []
 
         if self.bearer_token:
             self.logged_in = True
@@ -128,38 +147,37 @@ class ZeekrClient:
         """
         Fetches the regional API URLs.
         """
-        urls = network.customGet(self.session,
-                                 f"{const.APP_SERVER_HOST}{const.URL_URL}")
+        urls = network.customGet(
+            self.session, f"{const.APP_SERVER_HOST}{const.URL_URL}"
+        )
         if not urls.get("success", False):
             raise ZeekrException("Unable to fetch URL data")
 
         url_data = urls.get("data", [])
         found = False
         for url_block in url_data:
-            if url_block.get("countryCode",
-                             "").lower() == self.country_code.lower():
-                self.app_server_host = url_block.get("url", {}).get(
-                    "appServerUrl", "")
-                self.usercenter_host = url_block.get("url", {}).get(
-                    "userCenterUrl", "")
-                self.message_host = url_block.get("url", {}).get(
-                    "messageCoreUrl", "")
+            if url_block.get("countryCode", "").lower() == self.country_code.lower():
+                self.app_server_host = url_block.get("url", {}).get("appServerUrl", "")
+                self.usercenter_host = url_block.get("url", {}).get("userCenterUrl", "")
+                self.message_host = url_block.get("url", {}).get("messageCoreUrl", "")
                 self.region_code = url_block.get("regionCode", "SEA")
                 found = True
                 break
         if not found:
             raise ZeekrException(
-                f"Unable to find URLs for country code: {self.country_code}")
+                f"Unable to find URLs for country code: {self.country_code}"
+            )
 
-        if not self.app_server_host or not self.usercenter_host or not self.message_host:
-            raise ZeekrException(
-                "One or more API URLs are blank after fetching.")
+        if (
+            not self.app_server_host
+            or not self.usercenter_host
+            or not self.message_host
+        ):
+            raise ZeekrException("One or more API URLs are blank after fetching.")
 
-        self.region_login_server = const.REGION_LOGIN_SERVERS.get(
-            self.region_code)
+        self.region_login_server = const.REGION_LOGIN_SERVERS.get(self.region_code)
         if not self.region_login_server:
-            raise ZeekrException(
-                f"No login server for region: {self.region_code}")
+            raise ZeekrException(f"No login server for region: {self.region_code}")
 
     def _check_user(self) -> None:
         """
@@ -168,10 +186,7 @@ class ZeekrClient:
         user_code = network.customPost(
             self.session,
             f"{self.usercenter_host}{const.CHECKUSER_URL}",
-            {
-                "email": self.username,
-                "checkType": "1"
-            },
+            {"email": self.username, "checkType": "1"},
         )
         if not user_code.get("success", False):
             raise AuthException("User check failed")
@@ -197,8 +212,9 @@ class ZeekrClient:
             headers=const.DEFAULT_HEADERS,
             json=request_data,
         )
-        new_req = zeekr_hmac.generateHMAC(req, const.HMAC_ACCESS_KEY,
-                                          const.HMAC_SECRET_KEY)
+        new_req = zeekr_hmac.generateHMAC(
+            req, const.HMAC_ACCESS_KEY, const.HMAC_SECRET_KEY
+        )
         prepped = self.session.prepare_request(new_req)
         resp = self.session.send(prepped)
         login_data = resp.json()
@@ -221,7 +237,8 @@ class ZeekrClient:
         Fetches user information.
         """
         user_info_resp = network.customPost(
-            self.session, f"{self.usercenter_host}{const.USERINFO_URL}")
+            self.session, f"{self.usercenter_host}{const.USERINFO_URL}"
+        )
         if user_info_resp.get("success", False):
             self.user_info = user_info_resp.get("data", {})
 
@@ -239,8 +256,7 @@ class ZeekrClient:
         """
         Checks the inbox.
         """
-        network.customGet(self.session,
-                          f"{self.app_server_host}{const.INBOX_URL}")
+        network.customGet(self.session, f"{self.app_server_host}{const.INBOX_URL}")
 
     def _get_tsp_code(self) -> tuple[str, str]:
         """
@@ -266,7 +282,7 @@ class ZeekrClient:
         """
         network.customGet(
             self.session,
-            f"{self.usercenter_host}{const.UPDATELANGUAGE_URL}?language={language}"
+            f"{self.usercenter_host}{const.UPDATELANGUAGE_URL}?language={language}",
         )
 
     def _bearer_login(self, tsp_code: str) -> None:
@@ -295,12 +311,11 @@ class ZeekrClient:
         bearer_login_data = bearer_login_block.get("data", {})
         self.bearer_token = bearer_login_data.get("accessToken")
         if not self.bearer_token:
-            raise AuthException(
-                f"No bearer token in response: {bearer_login_data}")
+            raise AuthException(f"No bearer token in response: {bearer_login_data}")
 
         const.LOGGED_IN_HEADERS["authorization"] = self.bearer_token
 
-    def get_vehicle_list(self) -> list['Vehicle']:
+    def get_vehicle_list(self) -> list["Vehicle"]:
         """
         Fetches the list of vehicles.
         """
@@ -312,12 +327,10 @@ class ZeekrClient:
             f"{self.region_login_server}{const.VEHLIST_URL}?needSharedCar=true",
         )
         if not vehicle_list_block.get("success", False):
-            raise ZeekrException(
-                f"Failed to get vehicle list: {vehicle_list_block}")
+            raise ZeekrException(f"Failed to get vehicle list: {vehicle_list_block}")
 
         self.vehicles = [
-            Vehicle(self, v.get('vin'), v)
-            for v in vehicle_list_block.get("data", [])
+            Vehicle(self, v.get("vin"), v) for v in vehicle_list_block.get("data", [])
         ]
         return self.vehicles
 
@@ -328,8 +341,7 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, const.VIN_KEY,
-                                                  const.VIN_IV)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, const.VIN_KEY, const.VIN_IV)
 
         headers = const.LOGGED_IN_HEADERS.copy()
         headers["X-VIN"] = encrypted_vin
@@ -337,10 +349,12 @@ class ZeekrClient:
         vehicle_status_block = network.appSignedGet(
             self.session,
             f"{self.region_login_server}{const.VEHICLESTATUS_URL}?latest=false&target=new",
-            headers=headers)
+            headers=headers,
+        )
         if not vehicle_status_block.get("success", False):
             raise ZeekrException(
-                f"Failed to get vehicle status: {vehicle_status_block}")
+                f"Failed to get vehicle status: {vehicle_status_block}"
+            )
 
         return vehicle_status_block.get("data", {})
 
