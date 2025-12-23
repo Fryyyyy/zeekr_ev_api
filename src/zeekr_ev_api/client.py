@@ -127,10 +127,12 @@ class ZeekrClient:
         encrypted_bytes = cipher.encrypt(password_bytes)
         return base64.b64encode(encrypted_bytes).decode("utf-8")
 
-    def login(self) -> None:
+    def login(self, relogin: bool = False) -> None:
         """
         Logs in to the Zeekr API.
         """
+        if self.logged_in and not relogin:
+            return
         self._get_urls()
         self._check_user()
         self._do_login_request()
