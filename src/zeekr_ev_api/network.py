@@ -1,20 +1,22 @@
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from requests import Request, Session
 from . import const, zeekr_app_sig, zeekr_hmac
 
+if TYPE_CHECKING:
+    from .client import ZeekrClient
+
 log = logging.getLogger(__name__)
 
 
-def customPost(s: Session, url: str, body: dict | None = None) -> Any:
-    """ Sends a signed POST request with HMAC authentication. """
+def customPost(client: "ZeekrClient", url: str, body: dict | None = None) -> Any:
+    """Sends a signed POST request with HMAC authentication."""
     req = Request("POST", url, headers=const.DEFAULT_HEADERS, json=body)
-    req = zeekr_hmac.generateHMAC(req, const.HMAC_ACCESS_KEY,
-                                  const.HMAC_SECRET_KEY)
+    req = zeekr_hmac.generateHMAC(req, client.hmac_access_key, client.hmac_secret_key)
 
-    prepped = s.prepare_request(req)
-    resp = s.send(prepped)
+    prepped = client.session.prepare_request(req)
+    resp = client.session.send(prepped)
     log.debug("------ HEADERS ------")
     log.debug(resp.headers)
     log.debug("------ RESPONSE ------")
@@ -23,14 +25,13 @@ def customPost(s: Session, url: str, body: dict | None = None) -> Any:
     return resp.json()
 
 
-def customGet(s: Session, url: str) -> Any:
-    """ Sends a signed GET request with HMAC authentication. """
+def customGet(client: "ZeekrClient", url: str) -> Any:
+    """Sends a signed GET request with HMAC authentication."""
     req = Request("GET", url, headers=const.DEFAULT_HEADERS)
-    req = zeekr_hmac.generateHMAC(req, const.HMAC_ACCESS_KEY,
-                                  const.HMAC_SECRET_KEY)
+    req = zeekr_hmac.generateHMAC(req, client.hmac_access_key, client.hmac_secret_key)
 
-    prepped = s.prepare_request(req)
-    resp = s.send(prepped)
+    prepped = client.session.prepare_request(req)
+    resp = client.session.send(prepped)
     log.debug("------ HEADERS ------")
     log.debug(resp.headers)
     log.debug("------ RESPONSE ------")
@@ -39,12 +40,12 @@ def customGet(s: Session, url: str) -> Any:
     return resp.json()
 
 
-def appSignedPost(s: Session, url: str, body: str | None = None) -> Any:
-    """ Sends a signed POST request with an app signature. """
+def appSignedPost(client: "ZeekrClient", url: str, body: str | None = None) -> Any:
+    """Sends a signed POST request with an app signature."""
     req = Request("POST", url, headers=const.LOGGED_IN_HEADERS, data=body)
-    prepped = s.prepare_request(req)
+    prepped = client.session.prepare_request(req)
 
-    final = zeekr_app_sig.sign_request(prepped, const.PROD_SECRET)
+    final = zeekr_app_sig.sign_request(prepped, client.prod_secret)
 
     log.debug("--- Signed Request Details ---")
     log.debug(f"Method: {final.method}")
@@ -55,7 +56,7 @@ def appSignedPost(s: Session, url: str, body: str | None = None) -> Any:
     log.debug(f"Body: {final.body or ''}")
     log.debug(f"\nX-SIGNATURE: {final.headers['X-SIGNATURE']}")
 
-    resp = s.send(final)
+    resp = client.session.send(final)
     log.debug("------ HEADERS ------")
     log.debug(resp.headers)
     log.debug("------ RESPONSE ------")
@@ -64,15 +65,15 @@ def appSignedPost(s: Session, url: str, body: str | None = None) -> Any:
     return resp.json()
 
 
-def appSignedGet(s: Session, url: str, headers: dict | None = None) -> Any:
-    """ Sends a signed GET request with an app signature. """
+def appSignedGet(client: "ZeekrClient", url: str, headers: dict | None = None) -> Any:
+    """Sends a signed GET request with an app signature."""
     req = Request("GET", url, headers=const.LOGGED_IN_HEADERS)
     if headers:
         req.headers.update(headers)
-    prepped = s.prepare_request(req)
+    prepped = client.session.prepare_request(req)
 
-    final = zeekr_app_sig.sign_request(prepped, const.PROD_SECRET)
-    resp = s.send(final)
+    final = zeekr_app_sig.sign_request(prepped, client.prod_secret)
+    resp = client.session.send(final)
     log.debug("------ HEADERS ------")
     log.debug(resp.headers)
     log.debug("------ RESPONSE ------")

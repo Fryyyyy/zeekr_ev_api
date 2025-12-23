@@ -45,13 +45,13 @@ class ZeekrClient:
         self.session: requests.Session = requests.Session()
         self.password: str | None = password
 
-        # Set up secrets
-        const.HMAC_ACCESS_KEY = hmac_access_key
-        const.HMAC_SECRET_KEY = hmac_secret_key
-        const.PASSWORD_PUBLIC_KEY = password_public_key
-        const.PROD_SECRET = prod_secret
-        const.VIN_KEY = vin_key
-        const.VIN_IV = vin_iv
+        # Store secrets on instance instead of mutating global const
+        self.hmac_access_key = hmac_access_key or const.HMAC_ACCESS_KEY
+        self.hmac_secret_key = hmac_secret_key or const.HMAC_SECRET_KEY
+        self.password_public_key = password_public_key or const.PASSWORD_PUBLIC_KEY
+        self.prod_secret = prod_secret or const.PROD_SECRET
+        self.vin_key = vin_key or const.VIN_KEY
+        self.vin_iv = vin_iv or const.VIN_IV
 
         if session_data:
             self.load_session(session_data)
@@ -120,7 +120,7 @@ class ZeekrClient:
         """
         Encrypts the password using RSA.
         """
-        key_bytes = base64.b64decode(const.PASSWORD_PUBLIC_KEY)
+        key_bytes = base64.b64decode(self.password_public_key)
         public_key = RSA.import_key(key_bytes)
         cipher = PKCS1_v1_5.new(public_key)
         password_bytes = self.password.encode("utf-8")
@@ -147,9 +147,7 @@ class ZeekrClient:
         """
         Fetches the regional API URLs.
         """
-        urls = network.customGet(
-            self.session, f"{const.APP_SERVER_HOST}{const.URL_URL}"
-        )
+        urls = network.customGet(self, f"{const.APP_SERVER_HOST}{const.URL_URL}")
         if not urls.get("success", False):
             raise ZeekrException("Unable to fetch URL data")
 
@@ -184,7 +182,7 @@ class ZeekrClient:
         Checks if the user exists.
         """
         user_code = network.customPost(
-            self.session,
+            self,
             f"{self.usercenter_host}{const.CHECKUSER_URL}",
             {"email": self.username, "checkType": "1"},
         )
@@ -213,7 +211,7 @@ class ZeekrClient:
             json=request_data,
         )
         new_req = zeekr_hmac.generateHMAC(
-            req, const.HMAC_ACCESS_KEY, const.HMAC_SECRET_KEY
+            req, self.hmac_access_key, self.hmac_secret_key
         )
         prepped = self.session.prepare_request(new_req)
         resp = self.session.send(prepped)
@@ -237,7 +235,7 @@ class ZeekrClient:
         Fetches user information.
         """
         user_info_resp = network.customPost(
-            self.session, f"{self.usercenter_host}{const.USERINFO_URL}"
+            self, f"{self.usercenter_host}{const.USERINFO_URL}"
         )
         if user_info_resp.get("success", False):
             self.user_info = user_info_resp.get("data", {})
@@ -247,7 +245,7 @@ class ZeekrClient:
         Fetches the protocol.
         """
         network.customPost(
-            self.session,
+            self,
             f"{self.app_server_host}{const.PROTOCOL_URL}",
             {"country": self.country_code},
         )
@@ -256,14 +254,14 @@ class ZeekrClient:
         """
         Checks the inbox.
         """
-        network.customGet(self.session, f"{self.app_server_host}{const.INBOX_URL}")
+        network.customGet(self, f"{self.app_server_host}{const.INBOX_URL}")
 
     def _get_tsp_code(self) -> tuple[str, str]:
         """
         Gets the TSP code.
         """
         tsp_code_block = network.customGet(
-            self.session,
+            self,
             f"{self.usercenter_host}{const.TSPCODE_URL}?tspClientId={const.DEFAULT_HEADERS.get('client-id', '')}",
         )
         if not tsp_code_block.get("success", False):
@@ -281,7 +279,7 @@ class ZeekrClient:
         Updates the language.
         """
         network.customGet(
-            self.session,
+            self,
             f"{self.usercenter_host}{const.UPDATELANGUAGE_URL}?language={language}",
         )
 
@@ -301,7 +299,7 @@ class ZeekrClient:
         }
 
         bearer_login_block = network.appSignedPost(
-            self.session,
+            self,
             f"{self.region_login_server}{const.BEARERLOGIN_URL}",
             json.dumps(bearer_body, separators=(",", ":")),
         )
@@ -323,7 +321,7 @@ class ZeekrClient:
             raise ZeekrException("Not logged in")
 
         vehicle_list_block = network.appSignedGet(
-            self.session,
+            self,
             f"{self.region_login_server}{const.VEHLIST_URL}?needSharedCar=true",
         )
         if not vehicle_list_block.get("success", False):
@@ -341,13 +339,13 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, const.VIN_KEY, const.VIN_IV)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
 
         headers = const.LOGGED_IN_HEADERS.copy()
         headers["X-VIN"] = encrypted_vin
 
         vehicle_status_block = network.appSignedGet(
-            self.session,
+            self,
             f"{self.region_login_server}{const.VEHICLESTATUS_URL}?latest=false&target=new",
             headers=headers,
         )
