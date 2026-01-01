@@ -390,6 +390,29 @@ class ZeekrClient:
 
         return vehicle_status_block.get("data", {})
 
+    def do_remote_control(
+        self, vin: str, command: str, serviceID: str, setting: Dict[str, Any]
+    ) -> bool:
+        """
+        Performs a remote control action on the vehicle.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
+
+        body = {"command": command, "serviceID": serviceID, "setting": setting}
+
+        remote_control_block = network.appSignedPost(
+            self,
+            f"{self.region_login_server}{const.REMOTECONTROL_URL}",
+            json.dumps(body, separators=(",", ":")),
+        )
+        return remote_control_block.get("success", False)
+
 
 class Vehicle:
     """
