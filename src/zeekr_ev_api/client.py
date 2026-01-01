@@ -399,10 +399,10 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
-
-        headers = const.LOGGED_IN_HEADERS.copy()
-        headers["X-VIN"] = encrypted_vin
+        extra_header = {}
+        extra_header["X-VIN"] = zeekr_app_sig.aes_encrypt(
+            vin, self.vin_key, self.vin_iv
+        )
 
         body = {"command": command, "serviceID": serviceID, "setting": setting}
 
@@ -410,6 +410,7 @@ class ZeekrClient:
             self,
             f"{self.region_login_server}{const.REMOTECONTROL_URL}",
             json.dumps(body, separators=(",", ":")),
+            extra_headers=extra_header,
         )
         return remote_control_block.get("success", False)
 

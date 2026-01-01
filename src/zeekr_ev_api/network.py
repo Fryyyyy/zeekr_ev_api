@@ -42,10 +42,17 @@ def customGet(client: "ZeekrClient", url: str) -> Any:
     return resp.json()
 
 
-def appSignedPost(client: "ZeekrClient", url: str, body: str | None = None) -> Any:
+def appSignedPost(
+    client: "ZeekrClient",
+    url: str,
+    body: str | None = None,
+    extra_headers: dict | None = None,
+) -> Any:
     """Sends a signed POST request with an app signature."""
     logger = getattr(client, "logger", log)
     req = Request("POST", url, headers=const.LOGGED_IN_HEADERS, data=body)
+    if extra_headers:
+        req.headers.update(extra_headers)
     prepped = client.session.prepare_request(req)
 
     final = zeekr_app_sig.sign_request(prepped, client.prod_secret)
