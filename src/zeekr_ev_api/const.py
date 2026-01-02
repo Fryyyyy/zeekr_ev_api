@@ -19,6 +19,7 @@ INBOX_URL = "member/inbox/home"
 UPDATELANGUAGE_URL = "user/updateLanguage"
 SYCN_URL = "open-api/v1/mcs/notice/receiver/equipment/relation/sycn"
 VEHICLESTATUS_URL = "ms-vehicle-status/api/v1.0/vehicle/status/latest"
+VEHICLECHARGINGSTATUS_URL = "ms-vehicle-status/api/v1.0/vehicle/status/qrvs"
 REMOTECONTROLSTATE_URL = "ms-app-bff/api/v1.0/remoteControl/getVehicleState"
 REMOTECONTROL_URL = "ms-remote-control/v1.0/remoteControl/control"
 

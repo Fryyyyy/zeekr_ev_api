@@ -366,6 +366,30 @@ class ZeekrClient:
 
         return vehicle_status_block.get("data", {})
 
+    def get_vehicle_charging_status(self, vin: str) -> Dict[str, Any]:
+        """
+        Fetches the charging status for a specific vehicle.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
+
+        vehicle_charging_status_block = network.appSignedGet(
+            self,
+            f"{self.region_login_server}{const.VEHICLECHARGINGSTATUS_URL}",
+            headers=headers,
+        )
+        if not vehicle_charging_status_block.get("success", False):
+            raise ZeekrException(
+                f"Failed to get vehicle charging status: {vehicle_charging_status_block}"
+            )
+
+        return vehicle_charging_status_block.get("data", {})
+
     def get_vehicle_state(self, vin: str) -> dict[str, Any]:
         """
         Fetches the remote control state of a vehicle.
