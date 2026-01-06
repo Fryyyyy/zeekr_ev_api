@@ -171,10 +171,31 @@ class ZeekrClient:
                 self.region_code = url_block.get("regionCode", "SEA")
                 found = True
                 break
+
         if not found:
-            raise ZeekrException(
-                f"Unable to find URLs for country code: {self.country_code}"
+            eu_lookup = network.customGet(
+                self, "https://gateway-pub-azure.zeekr.eu/overseas-app/region/url"
             )
+            eu_has_country = False
+            if eu_lookup.get("success", False):
+                for region in eu_lookup.get("data", []):
+                    if region.get("countryCode", "").lower() == self.country_code.lower():
+                        eu_has_country = True
+                        break
+
+            if eu_has_country:
+                self.logger.info(
+                    "Country %s found in EU region list; using EU hosts",
+                    self.country_code,
+                )
+                self.app_server_host = "https://gateway-pub-azure.zeekr.eu/overseas-app/"
+                self.usercenter_host = "https://gateway-pub-azure.zeekr.eu/zeekr-cuc-idaas/"
+                self.message_host = "https://gateway-pub-azure.zeekr.eu/eu-message-core/"
+                self.region_code = "EU"
+            else:
+                raise ZeekrException(
+                    f"Country code not supported in region lookup: {self.country_code}"
+                )
 
         if (
             not self.app_server_host
@@ -186,6 +207,12 @@ class ZeekrClient:
         self.region_login_server = const.REGION_LOGIN_SERVERS.get(self.region_code)
         if not self.region_login_server:
             raise ZeekrException(f"No login server for region: {self.region_code}")
+        
+        # Update headers for region-specific project ID
+        if self.region_code == "EU":
+            const.LOGGED_IN_HEADERS["X-PROJECT-ID"] = "ZEEKR_EU"
+        else:
+            const.LOGGED_IN_HEADERS["X-PROJECT-ID"] = "ZEEKR_SEA"
 
     def _check_user(self) -> None:
         """
