@@ -5,6 +5,11 @@ APP_SERVER_HOST = "https://gateway-pub-hw-em-sg.zeekrlife.com/overseas-app/"
 USERCENTER_HOST = "https://gateway-pub-hw-em-sg.zeekrlife.com/zeekr-cuc-idaas-sea/"
 MESSAGE_HOST = "https://gateway-pub-hw-em-sg.zeekrlife.com/sea-message-core/"
 
+# EU Hosts
+EU_APP_SERVER_HOST = "https://gateway-pub-azure.zeekr.eu/overseas-app/"
+EU_USERCENTER_HOST = "https://gateway-pub-azure.zeekr.eu/zeekr-cuc-idaas/"
+EU_MESSAGE_HOST = "https://gateway-pub-azure.zeekr.eu/eu-message-core/"
+
 # URLs
 LOGIN_URL = "auth/loginByEmailEncrypt"
 PROTOCOL_URL = "protocol/service/getProtocol"
