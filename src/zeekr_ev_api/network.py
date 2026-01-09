@@ -1,5 +1,6 @@
 import logging
 from typing import Any, TYPE_CHECKING
+import json
 
 from requests import Request
 from . import const, zeekr_app_sig, zeekr_hmac
@@ -8,6 +9,16 @@ if TYPE_CHECKING:
     from .client import ZeekrClient
 
 log = logging.getLogger(__name__)
+
+
+def _safe_json(resp, logger) -> Any:
+    """Safely parse JSON response, logging errors."""
+    try:
+        return resp.json()
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error("Failed to decode JSON response: %s", e)
+        logger.error("Response status: %s, text: %s", resp.status_code, resp.text[:500] if resp.text else "(empty)")
+        return {"success": False, "error": f"Invalid JSON response: {e}", "status_code": resp.status_code}
 
 
 def customPost(client: "ZeekrClient", url: str, body: dict | None = None) -> Any:
@@ -23,7 +34,7 @@ def customPost(client: "ZeekrClient", url: str, body: dict | None = None) -> Any
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
-    return resp.json()
+    return _safe_json(resp, logger)
 
 
 def customGet(client: "ZeekrClient", url: str) -> Any:
@@ -39,7 +50,7 @@ def customGet(client: "ZeekrClient", url: str) -> Any:
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
-    return resp.json()
+    return _safe_json(resp, logger)
 
 
 def appSignedPost(
@@ -72,7 +83,7 @@ def appSignedPost(
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
-    return resp.json()
+    return _safe_json(resp, logger)
 
 
 def appSignedGet(client: "ZeekrClient", url: str, headers: dict | None = None) -> Any:
@@ -94,4 +105,4 @@ def appSignedGet(client: "ZeekrClient", url: str, headers: dict | None = None) -
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
-    return resp.json()
+    return _safe_json(resp, logger)

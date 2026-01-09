@@ -455,7 +455,7 @@ class ZeekrClient:
             vin, self.vin_key, self.vin_iv
         )
 
-        body = {"command": command, "serviceID": serviceID, "setting": setting}
+        body = {"command": command, "serviceId": serviceID, "setting": setting}
 
         remote_control_block = network.appSignedPost(
             self,
