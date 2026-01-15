@@ -465,6 +465,30 @@ class ZeekrClient:
         )
         return remote_control_block.get("success", False)
 
+    def get_vehicle_charging_limit(self, vin: str) -> Dict[str, Any]:
+        """
+        Fetches the charging limit (SoC) for a specific vehicle.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
+
+        vehicle_charging_limit_block = network.appSignedGet(
+            self,
+            f"{self.region_login_server}{const.CHARGING_LIMIT_URL}",
+            headers=headers,
+        )
+        if not vehicle_charging_limit_block.get("success", False):
+            raise ZeekrException(
+                f"Failed to get vehicle charging limit: {vehicle_charging_limit_block}"
+            )
+
+        return vehicle_charging_limit_block.get("data", {})
+
 
 class Vehicle:
     """
@@ -504,3 +528,9 @@ class Vehicle:
         Performs a remote control action on the vehicle.
         """
         return self._client.do_remote_control(self.vin, command, serviceID, setting)
+
+    def get_charging_limit(self) -> Any:
+        """
+        Fetches the vehicle charging limit.
+        """
+        return self._client.get_vehicle_charging_limit(self.vin)

@@ -1,6 +1,6 @@
 [project]
 name = "zeekr_ev_api"
-version = "0.1.7"
+version = "0.1.8"
 description = ""
 authors = [
     {name = "Fry",email = "fryx0r@gmail.com"}
