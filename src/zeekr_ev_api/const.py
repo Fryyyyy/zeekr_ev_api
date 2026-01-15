@@ -27,6 +27,7 @@ VEHICLESTATUS_URL = "ms-vehicle-status/api/v1.0/vehicle/status/latest"
 VEHICLECHARGINGSTATUS_URL = "ms-vehicle-status/api/v1.0/vehicle/status/qrvs"
 REMOTECONTROLSTATE_URL = "ms-app-bff/api/v1.0/remoteControl/getVehicleState"
 REMOTECONTROL_URL = "ms-remote-control/v1.0/remoteControl/control"
+CHARGING_LIMIT_URL = "ms-charge-manage/api/v1.0/charge/getLatestSoc"
 
 COUNTRY_CODE = "AU"
 REGION_CODE = "SEA"
@@ -84,4 +85,3 @@ LOGGED_IN_HEADERS = {
     "X-PLATFORM": "APP",
     "X-PROJECT-ID": "ZEEKR_SEA",
 }
-CHARGING_LIMIT_URL = "ms-charge-manage/api/v1.0/charge/getLatestSoc"
