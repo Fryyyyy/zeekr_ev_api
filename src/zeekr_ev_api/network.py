@@ -81,7 +81,6 @@ def appSignedPost(
     for k, v in final.headers.items():
         logger.debug(f"  {k}: {v}")
     logger.debug(f"Body: {final.body or ''}")
-    logger.debug(f"\nX-SIGNATURE: {final.headers['X-SIGNATURE']}")
 
     resp = client.session.send(final)
     logger.debug("------ HEADERS ------")

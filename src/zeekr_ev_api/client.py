@@ -446,6 +446,7 @@ class ZeekrClient:
     ) -> bool:
         """
         Performs a remote control action on the vehicle.
+        The caller must provide the correct command, serviceID, and setting for the desired action.
         """
         if not self.logged_in:
             raise ZeekrException("Not logged in")
@@ -455,11 +456,16 @@ class ZeekrClient:
             vin, self.vin_key, self.vin_iv
         )
 
+        if serviceID == "RCS":
+            endpoint = const.CHARGE_CONTROL_URL
+        else:
+            endpoint = const.REMOTECONTROL_URL
+
         body = {"command": command, "serviceId": serviceID, "setting": setting}
 
         remote_control_block = network.appSignedPost(
             self,
-            f"{self.region_login_server}{const.REMOTECONTROL_URL}",
+            f"{self.region_login_server}{endpoint}",
             json.dumps(body, separators=(",", ":")),
             extra_headers=extra_header,
         )
