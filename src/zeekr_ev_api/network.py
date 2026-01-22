@@ -92,7 +92,7 @@ def appSignedPost(
     result = _safe_json(resp, logger)
 
     # Check for token expiration
-    if result.get("msg") == "Token expired" or result.get("code") == "079012":
+    if result.get("msg") == "Token expired":
         logger.info("Token expired. Attempting refresh...")
         failed_token = client.bearer_token
 
@@ -121,7 +121,7 @@ def appSignedPost(
         result = _safe_json(resp, logger)
 
         # If it fails again, raise AuthException
-        if result.get("msg") == "Token expired" or result.get("code") == "079012":
+        if result.get("msg") == "Token expired":
             raise AuthException("Token expired (retry failed)")
 
     return result
@@ -151,7 +151,7 @@ def appSignedGet(client: "ZeekrClient", url: str, headers: dict | None = None) -
     result = _safe_json(resp, logger)
 
     # Check for token expiration
-    if result.get("msg") == "Token expired" or result.get("code") == "079012":
+    if result.get("msg") == "Token expired":
         logger.info("Token expired. Attempting refresh...")
         failed_token = client.bearer_token
 
@@ -180,7 +180,7 @@ def appSignedGet(client: "ZeekrClient", url: str, headers: dict | None = None) -
         result = _safe_json(resp, logger)
 
         # If it fails again, raise AuthException
-        if result.get("msg") == "Token expired" or result.get("code") == "079012":
+        if result.get("msg") == "Token expired":
             raise AuthException("Token expired (retry failed)")
 
     return result
