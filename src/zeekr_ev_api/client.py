@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import threading
+import warnings
 from typing import Any, Dict
 
 import requests
@@ -416,6 +417,18 @@ class ZeekrClient:
 
     def get_vehicle_state(self, vin: str) -> dict[str, Any]:
         """
+        Deprecated: Use get_remote_control_state instead.
+        Fetches the remote control state of a vehicle.
+        """
+        warnings.warn(
+            "get_vehicle_state is deprecated, use get_remote_control_state instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_remote_control_state(vin)
+
+    def get_remote_control_state(self, vin: str) -> dict[str, Any]:
+        """
         Fetches the remote control state of a vehicle.
         """
         if not self.logged_in:
@@ -522,7 +535,7 @@ class Vehicle:
         """
         Fetches the vehicle remote control state.
         """
-        return self._client.get_vehicle_state(self.vin)
+        return self._client.get_remote_control_state(self.vin)
 
     def do_remote_control(
         self, command: str, serviceID: str, setting: Dict[str, Any]
