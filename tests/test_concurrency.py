@@ -39,15 +39,3 @@ def test_verify_fix():
     # 8. Assert Client A still has its original token
     assert client_a.logged_in_headers["authorization"] == token_a, \
         f"Client A headers should be independent. Expected '{token_a}', got '{client_a.logged_in_headers['authorization']}'"
-
-    print("Verification successful: Clients have independent headers and global state is preserved.")
-
-if __name__ == "__main__":
-    try:
-        test_verify_fix()
-    except AssertionError as e:
-        print(f"Assertion failed: {e}")
-        exit(1)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        exit(1)
