@@ -31,6 +31,8 @@ CHARGING_LIMIT_URL = "ms-charge-manage/api/v1.0/charge/getLatestSoc"
 CHARGE_CONTROL_URL = "ms-charge-manage/api/v1.0/charge/control"
 CHARGING_PLAN_URL = "ms-charge-manage/api/v1.0/charge/getChargingPlan"
 LATEST_TRAVEL_PLAN_URL = "ms-charge-manage/api/v1.0/charge/getLatestTravelPlan"
+SET_CHARGE_PLAN_URL = "ms-charge-manage/api/v1.0/charge/setChargingPlan"
+SET_TRAVEL_PLAN_URL = "ms-charge-manage/api/v1.0/charge/setTravelPlan"
 
 COUNTRY_CODE = "AU"
 REGION_CODE = "SEA"
