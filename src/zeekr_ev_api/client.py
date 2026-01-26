@@ -6,6 +6,7 @@ Zeekr EV API Client
 import base64
 import json
 import logging
+import time
 from typing import Any, Dict, List
 
 import requests
@@ -645,6 +646,46 @@ class ZeekrClient:
         )
         return travel_plan_block.get("success", False)
 
+    def get_journey_log(
+        self,
+        vin: str,
+        start_time: int | None = None,
+        end_time: int | None = None,
+        page_size: int = 10,
+        current: int = 1,
+        last_id: int = -1,
+    ) -> Dict[str, Any]:
+        """Fetches the journey log (trip history) for a specific vehicle."""
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        now = int(time.time() * 1000)
+        if end_time is None:
+            end_time = now
+        if start_time is None:
+            start_time = now - (30 * 24 * 60 * 60 * 1000)  # 30 days ago
+
+        body = {
+            "current": current,
+            "endTime": end_time,
+            "lastId": last_id,
+            "pageSize": page_size,
+            "startTime": start_time,
+        }
+
+        journey_log_block = network.appSignedPost(
+            self,
+            f"{self.region_login_server}{const.JOURNEY_LOG_URL}",
+            json.dumps(body, separators=(",", ":")),
+            extra_headers={"X-VIN": encrypted_vin},
+        )
+        if not journey_log_block.get("success", False):
+            self.logger.debug("Failed to get journey log: %s", journey_log_block)
+            return {}
+
+        return journey_log_block.get("data", {})
 
 class Vehicle:
     """
@@ -755,4 +796,17 @@ class Vehicle:
         """
         return self._client.set_travel_plan(
             self.vin, command, start_time, scheduled_time, ac, bw, schedule_list, timer_id
+        )
+        
+    def get_journey_log(
+        self,
+        start_time: int | None = None,
+        end_time: int | None = None,
+        page_size: int = 10,
+        current: int = 1,
+        last_id: int = -1,
+    ) -> Any:
+        """Fetches the vehicle journey log (trip history)."""
+        return self._client.get_journey_log(
+            self.vin, start_time, end_time, page_size, current, last_id
         )
