@@ -710,36 +710,28 @@ class ZeekrClient:
     ) -> Dict[str, Any]:
         """
         Fetches detailed GPS trackpoints for a specific trip.
-
-        Args:
-            vin: Vehicle identification number.
-            trip_report_time: Report timestamp in milliseconds.
-            trip_id: Trip ID from journey log.
-
-        Returns:
-            Dictionary containing trackpoints list.
         """
         if not self.logged_in:
             raise ZeekrException("Not logged in")
-
+    
         headers = self.logged_in_headers.copy()
         headers["X-VIN"] = self._get_encrypted_vin(vin)
-
+    
         url = (
             f"{self.region_login_server}{const.TRIP_TRACKPOINTS_URL}"
-            f"?reportTime={trip_report_time}&tripId={trip_id}"
+            f"?tripReportTime={trip_report_time}&tripId={trip_id}"
         )
-
+    
         trackpoints_block = network.appSignedGet(
             self,
             url,
             headers=headers,
         )
-
+    
         if not trackpoints_block.get("success", False):
             self.logger.debug("Failed to get trip trackpoints: %s", trackpoints_block)
             return {}
-
+    
         return trackpoints_block.get("data", {})
 
 
