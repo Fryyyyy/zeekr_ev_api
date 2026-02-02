@@ -5,9 +5,6 @@ Zeekr EV API Client
 import base64
 import json
 import logging
-import time
-import threading
-import warnings
 from typing import Any, Dict, List
 
 import requests
@@ -15,7 +12,14 @@ from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 
 from . import const, network, zeekr_app_sig, zeekr_hmac
-from .exceptions import AuthException, ZeekrException
+
+
+class ZeekrException(Exception):
+    """Base exception for the library."""
+
+
+class AuthException(ZeekrException):
+    """Exception for authentication errors."""
 
 
 class ZeekrClient:
@@ -46,12 +50,6 @@ class ZeekrClient:
         # Logger for this client (allows caller to inject their logger)
         self.logger = logger or logging.getLogger(__name__)
 
-        # Lock for authentication updates
-        self.auth_lock = threading.Lock()
-
-        # Cache for encrypted VINs
-        self.vin_encryption_cache: Dict[str, str] = {}
-
         # Store secrets on instance instead of mutating global const
         self.hmac_access_key = hmac_access_key or const.HMAC_ACCESS_KEY
         self.hmac_secret_key = hmac_secret_key or const.HMAC_SECRET_KEY
@@ -59,8 +57,6 @@ class ZeekrClient:
         self.prod_secret = prod_secret or const.PROD_SECRET
         self.vin_key = vin_key or const.VIN_KEY
         self.vin_iv = vin_iv or const.VIN_IV
-
-        self.logged_in_headers = const.LOGGED_IN_HEADERS.copy()
 
         if session_data:
             self.load_session(session_data)
@@ -101,7 +97,7 @@ class ZeekrClient:
 
         if self.bearer_token:
             self.logged_in = True
-            self.logged_in_headers["authorization"] = self.bearer_token
+            const.LOGGED_IN_HEADERS["authorization"] = self.bearer_token
             if self.auth_token:
                 self.session.headers["authorization"] = self.auth_token
         else:
@@ -138,16 +134,6 @@ class ZeekrClient:
         password_bytes = self.password.encode("utf-8")
         encrypted_bytes = cipher.encrypt(password_bytes)
         return base64.b64encode(encrypted_bytes).decode("utf-8")
-
-    def _get_encrypted_vin(self, vin: str) -> str:
-        """
-        Encrypts the VIN using AES, with caching.
-        """
-        if vin not in self.vin_encryption_cache:
-            self.vin_encryption_cache[vin] = zeekr_app_sig.aes_encrypt(
-                vin, self.vin_key, self.vin_iv
-            )
-        return self.vin_encryption_cache[vin]
 
     def login(self, relogin: bool = False) -> None:
         """
@@ -221,12 +207,12 @@ class ZeekrClient:
         self.region_login_server = const.REGION_LOGIN_SERVERS.get(self.region_code)
         if not self.region_login_server:
             raise ZeekrException(f"No login server for region: {self.region_code}")
-        
+
         # Update headers for region-specific project ID
         if self.region_code == "EU":
-            self.logged_in_headers["X-PROJECT-ID"] = "ZEEKR_EU"
+            const.LOGGED_IN_HEADERS["X-PROJECT-ID"] = "ZEEKR_EU"
         else:
-            self.logged_in_headers["X-PROJECT-ID"] = "ZEEKR_SEA"
+            const.LOGGED_IN_HEADERS["X-PROJECT-ID"] = "ZEEKR_SEA"
 
     def _check_user(self) -> None:
         """
@@ -362,7 +348,7 @@ class ZeekrClient:
         if not self.bearer_token:
             raise AuthException(f"No bearer token in response: {bearer_login_data}")
 
-        self.logged_in_headers["authorization"] = self.bearer_token
+        const.LOGGED_IN_HEADERS["authorization"] = self.bearer_token
 
     def get_vehicle_list(self) -> list["Vehicle"]:
         """
@@ -390,8 +376,10 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
 
         vehicle_status_block = network.appSignedGet(
             self,
@@ -412,8 +400,10 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
 
         vehicle_charging_status_block = network.appSignedGet(
             self,
@@ -429,25 +419,15 @@ class ZeekrClient:
 
     def get_vehicle_state(self, vin: str) -> dict[str, Any]:
         """
-        Deprecated: Use get_remote_control_state instead.
-        Fetches the remote control state of a vehicle.
-        """
-        warnings.warn(
-            "get_vehicle_state is deprecated, use get_remote_control_state instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.get_remote_control_state(vin)
-
-    def get_remote_control_state(self, vin: str) -> dict[str, Any]:
-        """
         Fetches the remote control state of a vehicle.
         """
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
 
         vehicle_status_block = network.appSignedGet(
             self,
@@ -471,7 +451,10 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        extra_header = {"X-VIN": self._get_encrypted_vin(vin)}
+        extra_header = {}
+        extra_header["X-VIN"] = zeekr_app_sig.aes_encrypt(
+            vin, self.vin_key, self.vin_iv
+        )
 
         if serviceID == "RCS":
             endpoint = const.CHARGE_CONTROL_URL
@@ -495,8 +478,10 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
 
         vehicle_charging_limit_block = network.appSignedGet(
             self,
@@ -517,8 +502,10 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
 
         charge_plan_block = network.appSignedGet(
             self,
@@ -557,6 +544,8 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
         body = {
             "bcCycleActive": bc_cycle_active,
             "bcTempActive": bc_temp_active,
@@ -572,7 +561,7 @@ class ZeekrClient:
             self,
             f"{self.region_login_server}{const.SET_CHARGE_PLAN_URL}",
             json.dumps(body, separators=(",", ":")),
-            extra_headers={"X-VIN": self._get_encrypted_vin(vin)},
+            extra_headers={"X-VIN": encrypted_vin},
         )
         return charge_plan_block.get("success", False)
 
@@ -583,8 +572,10 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
+        headers = const.LOGGED_IN_HEADERS.copy()
+        headers["X-VIN"] = encrypted_vin
 
         travel_plan_block = network.appSignedGet(
             self,
@@ -603,10 +594,10 @@ class ZeekrClient:
         command: str = "start",
         start_time: str = "",
         scheduled_time: str = "",
-        ac: str = "true",
-        bw: str = "0",
+        ac_preconditioning: bool = True,
+        steering_wheel_heating: bool = False,
         schedule_list: List[Dict[str, str]] | None = None,
-        timer_id: str = "",
+        timer_id: str = "4",
     ) -> bool:
         """
         Sets the travel plan for a specific vehicle.
@@ -616,10 +607,10 @@ class ZeekrClient:
             command: "start" to enable, "stop" to disable the plan.
             start_time: Start time in HH:MM format (e.g., "08:00").
             scheduled_time: Timestamp in milliseconds as string.
-            ac: "true" or "false" for AC pre-conditioning.
-            bw: "1" or "0" for steering wheel heating.
+            ac_preconditioning: Enable AC pre-conditioning.
+            steering_wheel_heating: Enable steering wheel heating.
             schedule_list: List of schedule dicts for recurring schedules.
-            timer_id: Timer ID (usually "4" for travel plan).
+            timer_id: Timer ID (default "4" for travel plan).
 
         Returns:
             True if successful, False otherwise.
@@ -627,11 +618,13 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
+        encrypted_vin = zeekr_app_sig.aes_encrypt(vin, self.vin_key, self.vin_iv)
+
         body = {
-            "ac": ac,
+            "ac": "true" if ac_preconditioning else "false",
             "btActive": False,
             "btTempActive": False,
-            "bw": bw,
+            "bw": "1" if steering_wheel_heating else "0",
             "bwl": "1",
             "command": command,
             "scheduleList": schedule_list or [],
@@ -639,100 +632,13 @@ class ZeekrClient:
             "timerId": timer_id,
         }
 
-        # For non-recurring schedule with start command, set timer_id empty
-        if command == "start" and not schedule_list:
-            body["timerId"] = ""
-
         travel_plan_block = network.appSignedPost(
             self,
             f"{self.region_login_server}{const.SET_TRAVEL_PLAN_URL}",
             json.dumps(body, separators=(",", ":")),
-            extra_headers={"X-VIN": self._get_encrypted_vin(vin)},
+            extra_headers={"X-VIN": encrypted_vin},
         )
         return travel_plan_block.get("success", False)
-
-    def get_journey_log(
-        self,
-        vin: str,
-        page_size: int = 10,
-        current_page: int = 1,
-        last_id: int = -1,
-        days_back: int = 30,
-    ) -> Dict[str, Any]:
-        """
-        Fetches the journey log (trip history) for a specific vehicle.
-
-        Args:
-            vin: Vehicle identification number.
-            page_size: Number of trips per page.
-            current_page: Page number (1-indexed).
-            last_id: Last trip ID for pagination (-1 for first page).
-            days_back: Number of days back to fetch trips.
-
-        Returns:
-            Dictionary containing trip list and pagination info.
-        """
-        if not self.logged_in:
-            raise ZeekrException("Not logged in")
-
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
-
-        now_ms = int(time.time() * 1000)
-        start_ms = now_ms - (days_back * 24 * 60 * 60 * 1000)
-
-        body = {
-            "currentPage": current_page,
-            "endTime": now_ms,
-            "lastId": last_id,
-            "pageSize": page_size,
-            "startTime": start_ms,
-        }
-
-        journey_log_block = network.appSignedPost(
-            self,
-            f"{self.region_login_server}{const.JOURNEY_LOG_URL}",
-            json.dumps(body, separators=(",", ":")),
-            extra_headers=headers,
-        )
-
-        if not journey_log_block.get("success", False):
-            self.logger.debug("Failed to get journey log: %s", journey_log_block)
-            return {}
-
-        return journey_log_block.get("data", {})
-
-    def get_trip_trackpoints(
-        self,
-        vin: str,
-        trip_report_time: int,
-        trip_id: int,
-    ) -> Dict[str, Any]:
-        """
-        Fetches detailed GPS trackpoints for a specific trip.
-        """
-        if not self.logged_in:
-            raise ZeekrException("Not logged in")
-    
-        headers = self.logged_in_headers.copy()
-        headers["X-VIN"] = self._get_encrypted_vin(vin)
-    
-        url = (
-            f"{self.region_login_server}{const.TRIP_TRACKPOINTS_URL}"
-            f"?tripReportTime={trip_report_time}&tripId={trip_id}"
-        )
-    
-        trackpoints_block = network.appSignedGet(
-            self,
-            url,
-            headers=headers,
-        )
-    
-        if not trackpoints_block.get("success", False):
-            self.logger.debug("Failed to get trip trackpoints: %s", trackpoints_block)
-            return {}
-    
-        return trackpoints_block.get("data", {})
 
 
 class Vehicle:
@@ -764,7 +670,7 @@ class Vehicle:
         """
         Fetches the vehicle remote control state.
         """
-        return self._client.get_remote_control_state(self.vin)
+        return self._client.get_vehicle_state(self.vin)
 
     def do_remote_control(
         self, command: str, serviceID: str, setting: Dict[str, Any]
@@ -796,6 +702,16 @@ class Vehicle:
     ) -> bool:
         """
         Sets the vehicle charging plan.
+
+        Args:
+            start_time: Start time in HH:MM format (e.g., "01:15").
+            end_time: End time in HH:MM format (e.g., "06:45").
+            command: "start" to enable, "stop" to disable the plan.
+            bc_cycle_active: Battery conditioning cycle active.
+            bc_temp_active: Battery conditioning temperature active.
+
+        Returns:
+            True if successful, False otherwise.
         """
         return self._client.set_charge_plan(
             self.vin, start_time, end_time, command, bc_cycle_active, bc_temp_active
@@ -812,34 +728,27 @@ class Vehicle:
         command: str = "start",
         start_time: str = "",
         scheduled_time: str = "",
-        ac: str = "true",
-        bw: str = "0",
+        ac_preconditioning: bool = True,
+        steering_wheel_heating: bool = False,
         schedule_list: List[Dict[str, str]] | None = None,
-        timer_id: str = "",
+        timer_id: str = "4",
     ) -> bool:
         """
         Sets the vehicle travel plan.
+
+        Args:
+            command: "start" to enable, "stop" to disable the plan.
+            start_time: Start time in HH:MM format (e.g., "08:00").
+            scheduled_time: Timestamp in milliseconds as string.
+            ac_preconditioning: Enable AC pre-conditioning.
+            steering_wheel_heating: Enable steering wheel heating.
+            schedule_list: List of schedule dicts for recurring schedules.
+            timer_id: Timer ID (default "4" for travel plan).
+
+        Returns:
+            True if successful, False otherwise.
         """
         return self._client.set_travel_plan(
-            self.vin, command, start_time, scheduled_time, ac, bw, schedule_list, timer_id
+            self.vin, command, start_time, scheduled_time,
+            ac_preconditioning, steering_wheel_heating, schedule_list, timer_id
         )
-
-    def get_journey_log(
-        self,
-        page_size: int = 10,
-        current_page: int = 1,
-        last_id: int = -1,
-        days_back: int = 30,
-    ) -> Dict[str, Any]:
-        """
-        Fetches the vehicle journey log.
-        """
-        return self._client.get_journey_log(
-            self.vin, page_size, current_page, last_id, days_back
-        )
-
-    def get_trip_trackpoints(self, trip_report_time: int, trip_id: int) -> Dict[str, Any]:
-        """
-        Fetches detailed trackpoints for a specific trip.
-        """
-        return self._client.get_trip_trackpoints(self.vin, trip_report_time, trip_id)
