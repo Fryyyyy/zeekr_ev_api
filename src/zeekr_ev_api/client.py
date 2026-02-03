@@ -5,9 +5,10 @@ Zeekr EV API Client
 import base64
 import json
 import logging
+import time
 import threading
 import warnings
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import requests
 from Crypto.Cipher import PKCS1_v1_5
@@ -220,7 +221,7 @@ class ZeekrClient:
         self.region_login_server = const.REGION_LOGIN_SERVERS.get(self.region_code)
         if not self.region_login_server:
             raise ZeekrException(f"No login server for region: {self.region_code}")
-        
+
         # Update headers for region-specific project ID
         if self.region_code == "EU":
             self.logged_in_headers["X-PROJECT-ID"] = "ZEEKR_EU"
@@ -509,6 +510,240 @@ class ZeekrClient:
 
         return vehicle_charging_limit_block.get("data", {})
 
+    def get_charge_plan(self, vin: str) -> Dict[str, Any]:
+        """
+        Fetches the charging plan for a specific vehicle.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        headers = self.logged_in_headers.copy()
+        headers["X-VIN"] = self._get_encrypted_vin(vin)
+
+        charge_plan_block = network.appSignedGet(
+            self,
+            f"{self.region_login_server}{const.CHARGING_PLAN_URL}",
+            headers=headers,
+        )
+        if not charge_plan_block.get("success", False):
+            self.logger.debug("Failed to get charge plan: %s", charge_plan_block)
+            return {}
+
+        return charge_plan_block.get("data", {})
+
+    def set_charge_plan(
+        self,
+        vin: str,
+        start_time: str,
+        end_time: str,
+        command: str = "start",
+        bc_cycle_active: bool = False,
+        bc_temp_active: bool = False,
+    ) -> bool:
+        """
+        Sets the charging plan for a specific vehicle.
+
+        Args:
+            vin: Vehicle identification number.
+            start_time: Start time in HH:MM format (e.g., "01:15").
+            end_time: End time in HH:MM format (e.g., "06:45").
+            command: "start" to enable, "stop" to disable the plan.
+            bc_cycle_active: Battery conditioning cycle active.
+            bc_temp_active: Battery conditioning temperature active.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        body = {
+            "bcCycleActive": bc_cycle_active,
+            "bcTempActive": bc_temp_active,
+            "command": command,
+            "endTime": end_time,
+            "scheduledTime": "",
+            "startTime": start_time,
+            "target": "2",
+            "timerId": "2",
+        }
+
+        charge_plan_block = network.appSignedPost(
+            self,
+            f"{self.region_login_server}{const.SET_CHARGE_PLAN_URL}",
+            json.dumps(body, separators=(",", ":")),
+            extra_headers={"X-VIN": self._get_encrypted_vin(vin)},
+        )
+        return charge_plan_block.get("success", False)
+
+    def get_travel_plan(self, vin: str) -> Dict[str, Any]:
+        """
+        Fetches the latest travel plan for a specific vehicle.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        headers = self.logged_in_headers.copy()
+        headers["X-VIN"] = self._get_encrypted_vin(vin)
+
+        travel_plan_block = network.appSignedGet(
+            self,
+            f"{self.region_login_server}{const.LATEST_TRAVEL_PLAN_URL}",
+            headers=headers,
+        )
+        if not travel_plan_block.get("success", False):
+            self.logger.debug("Failed to get travel plan: %s", travel_plan_block)
+            return {}
+
+        return travel_plan_block.get("data", {})
+
+    def set_travel_plan(
+        self,
+        vin: str,
+        command: str = "start",
+        start_time: str = "",
+        scheduled_time: str = "",
+        ac_preconditioning: bool = True,
+        steering_wheel_heating: bool = False,
+        schedule_list: List[Dict[str, str]] | None = None,
+        timer_id: str = "4",
+    ) -> bool:
+        """
+        Sets the travel plan for a specific vehicle.
+
+        Args:
+            vin: Vehicle identification number.
+            command: "start" to enable, "stop" to disable the plan.
+            start_time: Start time in HH:MM format (e.g., "08:00").
+            scheduled_time: Timestamp in milliseconds as string.
+            ac_preconditioning: Enable AC pre-conditioning.
+            steering_wheel_heating: Enable steering wheel heating.
+            schedule_list: List of schedule dicts for recurring schedules.
+            timer_id: Timer ID (default "4" for travel plan).
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        body = {
+            "ac": "true" if ac_preconditioning else "false",
+            "btActive": False,
+            "btTempActive": False,
+            "bw": "1" if steering_wheel_heating else "0",
+            "bwl": "1",
+            "command": command,
+            "scheduleList": schedule_list or [],
+            "scheduledTime": scheduled_time,
+            "timerId": timer_id,
+        }
+
+        travel_plan_block = network.appSignedPost(
+            self,
+            f"{self.region_login_server}{const.SET_TRAVEL_PLAN_URL}",
+            json.dumps(body, separators=(",", ":")),
+            extra_headers={"X-VIN": self._get_encrypted_vin(vin)},
+        )
+        return travel_plan_block.get("success", False)
+
+    def get_journey_log(
+        self,
+        vin: str,
+        page_size: int = 10,
+        current_page: int = 1,
+        last_id: int = -1,
+        days_back: int = 30,
+    ) -> Dict[str, Any]:
+        """
+        Fetches the journey log (trip history) for a specific vehicle.
+
+        Args:
+            vin: Vehicle identification number.
+            page_size: Number of trips per page.
+            current_page: Page number (1-indexed).
+            last_id: Last trip ID for pagination (-1 for first page).
+            days_back: Number of days back to fetch trips.
+
+        Returns:
+            Dictionary containing:
+            - total: int - Total number of trips matching the query.
+            - list: List[dict] - Trip records, each containing:
+                - tripId: int - Unique trip identifier.
+                - reportTime: int - Report timestamp (ms since epoch).
+                - startTime: int - Trip start timestamp (ms since epoch).
+                - endTime: int - Trip end timestamp (ms since epoch).
+                - startMileage: float - Odometer at trip start (km).
+                - endMileage: float - Odometer at trip end (km).
+                - distance: float - Trip distance (km).
+                - duration: int - Trip duration (seconds).
+                - avgSpeed: float - Average speed (km/h).
+                - energyConsumption: float - Energy used (kWh).
+                - startLongitude/startLatitude: float - Start coordinates.
+                - endLongitude/endLatitude: float - End coordinates.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        headers = self.logged_in_headers.copy()
+        headers["X-VIN"] = self._get_encrypted_vin(vin)
+
+        now_ms = int(time.time() * 1000)
+        start_ms = now_ms - (days_back * 24 * 60 * 60 * 1000)
+
+        body = {
+            "currentPage": current_page,
+            "endTime": now_ms,
+            "lastId": last_id,
+            "pageSize": page_size,
+            "startTime": start_ms,
+        }
+
+        journey_log_block = network.appSignedPost(
+            self,
+            f"{self.region_login_server}{const.JOURNEY_LOG_URL}",
+            json.dumps(body, separators=(",", ":")),
+            extra_headers=headers,
+        )
+
+        if not journey_log_block.get("success", False):
+            self.logger.debug("Failed to get journey log: %s", journey_log_block)
+            return {}
+
+        return journey_log_block.get("data", {})
+
+    def get_trip_trackpoints(
+        self,
+        vin: str,
+        trip_report_time: int,
+        trip_id: int,
+    ) -> Dict[str, Any]:
+        """
+        Fetches detailed GPS trackpoints for a specific trip.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        headers = self.logged_in_headers.copy()
+        headers["X-VIN"] = self._get_encrypted_vin(vin)
+
+        url = (
+            f"{self.region_login_server}{const.TRIP_TRACKPOINTS_URL}"
+            f"?tripReportTime={trip_report_time}&tripId={trip_id}"
+        )
+
+        trackpoints_block = network.appSignedGet(
+            self,
+            url,
+            headers=headers,
+        )
+
+        if not trackpoints_block.get("success", False):
+            self.logger.debug("Failed to get trip trackpoints: %s", trackpoints_block)
+            return {}
+
+        return trackpoints_block.get("data", {})
+
 
 class Vehicle:
     """
@@ -554,3 +789,80 @@ class Vehicle:
         Fetches the vehicle charging limit.
         """
         return self._client.get_vehicle_charging_limit(self.vin)
+
+    def get_charge_plan(self) -> Any:
+        """
+        Fetches the vehicle charging plan.
+        """
+        return self._client.get_charge_plan(self.vin)
+
+    def set_charge_plan(
+        self,
+        start_time: str,
+        end_time: str,
+        command: str = "start",
+        bc_cycle_active: bool = False,
+        bc_temp_active: bool = False,
+    ) -> bool:
+        """
+        Sets the vehicle charging plan.
+        """
+        return self._client.set_charge_plan(
+            self.vin, start_time, end_time, command, bc_cycle_active, bc_temp_active
+        )
+
+    def get_travel_plan(self) -> Any:
+        """
+        Fetches the vehicle travel plan.
+        """
+        return self._client.get_travel_plan(self.vin)
+
+    def set_travel_plan(
+        self,
+        command: str = "start",
+        start_time: str = "",
+        scheduled_time: str = "",
+        ac_preconditioning: bool = True,
+        steering_wheel_heating: bool = False,
+        schedule_list: List[Dict[str, str]] | None = None,
+        timer_id: str = "4",
+    ) -> bool:
+        """
+        Sets the vehicle travel plan.
+
+        Args:
+            command: "start" to enable, "stop" to disable the plan.
+            start_time: Start time in HH:MM format (e.g., "08:00").
+            scheduled_time: Timestamp in milliseconds as string.
+            ac_preconditioning: Enable AC pre-conditioning.
+            steering_wheel_heating: Enable steering wheel heating.
+            schedule_list: List of schedule dicts for recurring schedules.
+            timer_id: Timer ID (default "4" for travel plan).
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        return self._client.set_travel_plan(
+            self.vin, command, start_time, scheduled_time,
+            ac_preconditioning, steering_wheel_heating, schedule_list, timer_id
+        )
+
+    def get_journey_log(
+        self,
+        page_size: int = 10,
+        current_page: int = 1,
+        last_id: int = -1,
+        days_back: int = 30,
+    ) -> Dict[str, Any]:
+        """
+        Fetches the vehicle journey log.
+        """
+        return self._client.get_journey_log(
+            self.vin, page_size, current_page, last_id, days_back
+        )
+
+    def get_trip_trackpoints(self, trip_report_time: int, trip_id: int) -> Dict[str, Any]:
+        """
+        Fetches detailed trackpoints for a specific trip.
+        """
+        return self._client.get_trip_trackpoints(self.vin, trip_report_time, trip_id)
