@@ -139,47 +139,84 @@ def test_not_logged_in(mock_client):
         mock_client.get_vehicle_list()
 
 def test_appSignedGet_concurrent_header_leak(mock_client):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
     from zeekr_ev_api.network import appSignedGet
 
     # Mock the session to avoid actually sending requests
     mock_client.session = MagicMock()
-    prepped_mock = MagicMock()
-    prepped_mock.url = "http://mock/url1"
-    prepped_mock.headers = {}
-    prepped_mock.body = None
-    prepped_mock.method = "GET"
-    mock_client.session.prepare_request = MagicMock(return_value=prepped_mock)
+
+    # Store the actual headers prepared for each request
+    prepared_headers = []
+
+    def side_effect(req):
+        prepared_headers.append(req.headers)
+        prepped_mock = MagicMock()
+        prepped_mock.url = "http://mock/url1"
+        prepped_mock.headers = req.headers
+        prepped_mock.body = None
+        prepped_mock.method = "GET"
+        return prepped_mock
+
+    mock_client.session.prepare_request = MagicMock(side_effect=side_effect)
     mock_client.session.send = MagicMock(return_value=MagicMock(json=lambda: {"success": True}, status_code=200))
 
     # Initialize logged_in_headers
     mock_client.logged_in_headers = {"authorization": "bearer_token"}
 
-    # Simulate a request with specific headers
-    extra_headers_1 = {"X-VIN": "vin_1"}
-    appSignedGet(mock_client, "http://mock/url1", headers=extra_headers_1)
+    # Simulate parallel requests
+    def worker(vin):
+        appSignedGet(mock_client, "http://mock/url1", headers={"X-VIN": vin})
+
+    vins = [f"vin_{i}" for i in range(10)]
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        executor.map(worker, vins)
 
     # Check that client.logged_in_headers hasn't been mutated
     assert "X-VIN" not in mock_client.logged_in_headers, "client.logged_in_headers was mutated!"
 
+    # Check that each request had exactly its own VIN and not another one's
+    extracted_vins = [h.get("X-VIN") for h in prepared_headers]
+    assert set(extracted_vins) == set(vins), "Some requests sent mixed up or missing headers!"
+
 def test_appSignedPost_concurrent_header_leak(mock_client):
+    from concurrent.futures import ThreadPoolExecutor
     from zeekr_ev_api.network import appSignedPost
 
     # Mock the session to avoid actually sending requests
     mock_client.session = MagicMock()
-    prepped_mock = MagicMock()
-    prepped_mock.url = "http://mock/url1"
-    prepped_mock.headers = {}
-    prepped_mock.body = None
-    prepped_mock.method = "POST"
-    mock_client.session.prepare_request = MagicMock(return_value=prepped_mock)
+
+    # Store the actual headers prepared for each request
+    prepared_headers = []
+
+    def side_effect(req):
+        prepared_headers.append(req.headers)
+        prepped_mock = MagicMock()
+        prepped_mock.url = "http://mock/url1"
+        prepped_mock.headers = req.headers
+        prepped_mock.body = None
+        prepped_mock.method = "POST"
+        return prepped_mock
+
+    mock_client.session.prepare_request = MagicMock(side_effect=side_effect)
     mock_client.session.send = MagicMock(return_value=MagicMock(json=lambda: {"success": True}, status_code=200))
 
     # Initialize logged_in_headers
     mock_client.logged_in_headers = {"authorization": "bearer_token"}
 
-    # Simulate a request with specific headers
-    extra_headers_1 = {"X-VIN": "vin_1"}
-    appSignedPost(mock_client, "http://mock/url1", extra_headers=extra_headers_1)
+    # Simulate parallel requests
+    def worker(vin):
+        appSignedPost(mock_client, "http://mock/url1", extra_headers={"X-VIN": vin})
+
+    vins = [f"vin_{i}" for i in range(10)]
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        executor.map(worker, vins)
 
     # Check that client.logged_in_headers hasn't been mutated
     assert "X-VIN" not in mock_client.logged_in_headers, "client.logged_in_headers was mutated!"
+
+    # Check that each request had exactly its own VIN and not another one's
+    extracted_vins = [h.get("X-VIN") for h in prepared_headers]
+    assert set(extracted_vins) == set(vins), "Some requests sent mixed up or missing headers!"
