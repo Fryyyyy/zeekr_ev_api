@@ -137,3 +137,49 @@ def test_not_logged_in(mock_client):
     mock_client.logged_in = False
     with pytest.raises(ZeekrException, match="Not logged in"):
         mock_client.get_vehicle_list()
+
+def test_appSignedGet_concurrent_header_leak(mock_client):
+    from zeekr_ev_api.network import appSignedGet
+
+    # Mock the session to avoid actually sending requests
+    mock_client.session = MagicMock()
+    prepped_mock = MagicMock()
+    prepped_mock.url = "http://mock/url1"
+    prepped_mock.headers = {}
+    prepped_mock.body = None
+    prepped_mock.method = "GET"
+    mock_client.session.prepare_request = MagicMock(return_value=prepped_mock)
+    mock_client.session.send = MagicMock(return_value=MagicMock(json=lambda: {"success": True}, status_code=200))
+
+    # Initialize logged_in_headers
+    mock_client.logged_in_headers = {"authorization": "bearer_token"}
+
+    # Simulate a request with specific headers
+    extra_headers_1 = {"X-VIN": "vin_1"}
+    appSignedGet(mock_client, "http://mock/url1", headers=extra_headers_1)
+
+    # Check that client.logged_in_headers hasn't been mutated
+    assert "X-VIN" not in mock_client.logged_in_headers, "client.logged_in_headers was mutated!"
+
+def test_appSignedPost_concurrent_header_leak(mock_client):
+    from zeekr_ev_api.network import appSignedPost
+
+    # Mock the session to avoid actually sending requests
+    mock_client.session = MagicMock()
+    prepped_mock = MagicMock()
+    prepped_mock.url = "http://mock/url1"
+    prepped_mock.headers = {}
+    prepped_mock.body = None
+    prepped_mock.method = "POST"
+    mock_client.session.prepare_request = MagicMock(return_value=prepped_mock)
+    mock_client.session.send = MagicMock(return_value=MagicMock(json=lambda: {"success": True}, status_code=200))
+
+    # Initialize logged_in_headers
+    mock_client.logged_in_headers = {"authorization": "bearer_token"}
+
+    # Simulate a request with specific headers
+    extra_headers_1 = {"X-VIN": "vin_1"}
+    appSignedPost(mock_client, "http://mock/url1", extra_headers=extra_headers_1)
+
+    # Check that client.logged_in_headers hasn't been mutated
+    assert "X-VIN" not in mock_client.logged_in_headers, "client.logged_in_headers was mutated!"
