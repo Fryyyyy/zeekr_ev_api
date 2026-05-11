@@ -654,16 +654,21 @@ class ZeekrClient:
         current_page: int = 1,
         last_id: int = -1,
         days_back: int = 30,
+        end_time: int = 0,
     ) -> Dict[str, Any]:
         """
         Fetches the journey log (trip history) for a specific vehicle.
+
+        Pagination: the API uses time-window pagination. Pass end_time (ms epoch)
+        from the previous page's response lastId - 1 to advance pages.
 
         Args:
             vin: Vehicle identification number.
             page_size: Number of trips per page.
             current_page: Page number (1-indexed).
-            last_id: Last trip ID for pagination (-1 for first page).
-            days_back: Number of days back to fetch trips.
+            last_id: Ignored by the API; kept for signature compatibility.
+            days_back: Number of days back from end_time to set startTime.
+            end_time: Window end timestamp (ms). 0 = current time (first page).
 
         Returns:
             Dictionary containing:
@@ -689,11 +694,12 @@ class ZeekrClient:
         headers["X-VIN"] = self._get_encrypted_vin(vin)
 
         now_ms = int(time.time() * 1000)
-        start_ms = now_ms - (days_back * 24 * 60 * 60 * 1000)
+        actual_end_ms = end_time if end_time > 0 else now_ms
+        start_ms = actual_end_ms - (days_back * 24 * 60 * 60 * 1000)
 
         body = {
             "currentPage": current_page,
-            "endTime": now_ms,
+            "endTime": actual_end_ms,
             "lastId": last_id,
             "pageSize": page_size,
             "startTime": start_ms,
@@ -853,12 +859,13 @@ class Vehicle:
         current_page: int = 1,
         last_id: int = -1,
         days_back: int = 30,
+        end_time: int = 0,
     ) -> Dict[str, Any]:
         """
         Fetches the vehicle journey log.
         """
         return self._client.get_journey_log(
-            self.vin, page_size, current_page, last_id, days_back
+            self.vin, page_size, current_page, last_id, days_back, end_time
         )
 
     def get_trip_trackpoints(self, trip_report_time: int, trip_id: int) -> Dict[str, Any]:
