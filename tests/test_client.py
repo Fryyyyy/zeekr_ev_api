@@ -220,3 +220,38 @@ def test_appSignedPost_concurrent_header_leak(mock_client):
     # Check that each request had exactly its own VIN and not another one's
     extracted_vins = [h.get("X-VIN") for h in prepared_headers]
     assert set(extracted_vins) == set(vins), "Some requests sent mixed up or missing headers!"
+
+def test_export_and_load_session_with_password(mock_client):
+    """Test that password is included in exported session and restored when loading."""
+    mock_client.username = "test_user"
+    mock_client.password = "test_password"
+    mock_client.country_code = "US"
+    mock_client.logged_in = True
+
+    session_data = mock_client.export_session()
+
+    assert session_data.get("password") == "test_password"
+    assert session_data.get("username") == "test_user"
+
+    from zeekr_ev_api.client import ZeekrClient
+
+    new_client = ZeekrClient(session_data=session_data)
+    assert new_client.username == "test_user"
+    assert new_client.password == "test_password"
+    assert new_client.country_code == "US"
+
+def test_load_session_preserves_passed_password(mock_client):
+    """Test that load_session doesn't overwrite a passed password with None."""
+    from zeekr_ev_api.client import ZeekrClient
+
+    session_data = {
+        "username": "test_user",
+        "country_code": "US",
+        "bearer_token": "some_token"
+    }
+
+    new_client = ZeekrClient(password="explicit_password", session_data=session_data)
+
+    assert new_client.username == "test_user"
+    assert new_client.password == "explicit_password"
+    assert new_client.logged_in is True

@@ -88,6 +88,7 @@ class ZeekrClient:
     def load_session(self, session_data: dict) -> None:
         """Loads a session from a dictionary."""
         self.username = session_data.get("username", "")
+        self.password = session_data.get("password") or self.password
         self.country_code = session_data.get("country_code", "AU")
         self.auth_token = session_data.get("auth_token")
         self.bearer_token = session_data.get("bearer_token")
@@ -114,6 +115,7 @@ class ZeekrClient:
 
         return {
             "username": self.username,
+            "password": self.password,
             "country_code": self.country_code,
             "auth_token": self.auth_token,
             "bearer_token": self.bearer_token,
