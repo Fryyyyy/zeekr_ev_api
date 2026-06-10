@@ -220,15 +220,28 @@ class ZeekrClient:
         ):
             raise ZeekrException("One or more API URLs are blank after fetching.")
 
+        # LA region: /region/url returns hosts without a trailing slash, so
+        # endpoint concatenation yields an invalid path (e.g. ".../idaas-la" +
+        # "checkUserV2"). Normalise by ensuring a trailing slash on each host.
+        for _host_attr in ("app_server_host", "usercenter_host", "message_host"):
+            _host = getattr(self, _host_attr)
+            if _host and not _host.endswith("/"):
+                setattr(self, _host_attr, _host + "/")
+
         self.region_login_server = const.REGION_LOGIN_SERVERS.get(self.region_code)
         if not self.region_login_server:
             raise ZeekrException(f"No login server for region: {self.region_code}")
 
-        # Update headers for region-specific project ID
-        if self.region_code == "EU":
-            self.logged_in_headers["X-PROJECT-ID"] = "ZEEKR_EU"
-        else:
-            self.logged_in_headers["X-PROJECT-ID"] = "ZEEKR_SEA"
+        # Update headers for region-specific project ID. The gateway validates
+        # X-PROJECT-ID against an enum, so non-EU regions must map to their own
+        # value (e.g. LA requires "ZEEKR_LA"); defaulting everything to
+        # "ZEEKR_SEA" fails LA login with "00A02 ... validation failed".
+        # Only verified regions are mapped; others default to ZEEKR_SEA until a
+        # user from that region can confirm the correct project id.
+        self.logged_in_headers["X-PROJECT-ID"] = {
+            "EU": "ZEEKR_EU",
+            "LA": "ZEEKR_LA",
+        }.get(self.region_code, "ZEEKR_SEA")
 
     def _check_user(self) -> None:
         """
