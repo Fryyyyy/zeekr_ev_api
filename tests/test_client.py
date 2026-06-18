@@ -255,3 +255,33 @@ def test_load_session_preserves_passed_password(mock_client):
     assert new_client.username == "test_user"
     assert new_client.password == "explicit_password"
     assert new_client.logged_in is True
+
+
+def test_default_request_timeout_applied(mock_client):
+    """Every request passes the default timeout to session.send."""
+    from zeekr_ev_api import network
+
+    mock_client.session.send.return_value.json.return_value = {
+        "success": True,
+        "data": {},
+    }
+    network.customGet(mock_client, "https://mock.server/x")
+
+    assert (
+        mock_client.session.send.call_args.kwargs.get("timeout")
+        == const.REQUEST_TIMEOUT
+    )
+
+
+def test_request_timeout_override():
+    """A caller-supplied timeout overrides the default."""
+    client = ZeekrClient(
+        username="test@example.com",
+        password="password",
+        hmac_access_key="key",
+        hmac_secret_key="secret",
+        password_public_key="pubkey",
+        prod_secret="prodsecret",
+        timeout=5,
+    )
+    assert client.timeout == 5

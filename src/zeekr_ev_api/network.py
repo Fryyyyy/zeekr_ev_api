@@ -46,7 +46,9 @@ def customPost(client: "ZeekrClient", url: str, body: dict | None = None) -> Any
     req = zeekr_hmac.generateHMAC(req, client.hmac_access_key, client.hmac_secret_key)
 
     prepped = client.session.prepare_request(req)
-    resp = client.session.send(prepped)
+    resp = client.session.send(
+        prepped, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
+    )
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")
@@ -64,7 +66,9 @@ def customGet(client: "ZeekrClient", url: str) -> Any:
     req = zeekr_hmac.generateHMAC(req, client.hmac_access_key, client.hmac_secret_key)
 
     prepped = client.session.prepare_request(req)
-    resp = client.session.send(prepped)
+    resp = client.session.send(
+        prepped, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
+    )
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")
@@ -100,7 +104,9 @@ def appSignedPost(
         logger.debug(f"  {k}: {v}")
     logger.debug(f"Body: {final.body or ''}")
 
-    resp = client.session.send(final)
+    resp = client.session.send(
+        final, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
+    )
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")
@@ -140,7 +146,9 @@ def appSignedGet(
     prepped = client.session.prepare_request(req)
 
     final = zeekr_app_sig.sign_request(prepped, client.prod_secret)
-    resp = client.session.send(final)
+    resp = client.session.send(
+        final, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
+    )
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")
