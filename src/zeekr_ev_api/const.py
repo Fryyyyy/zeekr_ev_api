@@ -41,6 +41,16 @@ TRIP_TRACKPOINTS_URL = "ms-vehicle-trail/v1.0/journalLog/trackpoint/list"
 # blocking the caller indefinitely. Callers can override via ZeekrClient(timeout=...).
 REQUEST_TIMEOUT = (10, 30)
 
+# Transient-failure retry policy, applied via a urllib3 Retry mounted on the
+# session. Retries connection errors and 429/5xx responses with exponential
+# backoff. Only idempotent methods (GET/HEAD) are retried on a bad status or
+# read timeout, so a command POST is never re-issued after the gateway may
+# already have accepted it. Callers can override via ZeekrClient(max_retries=,
+# retry_backoff=).
+MAX_RETRIES = 2
+RETRY_BACKOFF = 0.5
+RETRY_STATUS_FORCELIST = (429, 500, 502, 503, 504)
+
 COUNTRY_CODE = "AU"
 REGION_CODE = "SEA"
 
