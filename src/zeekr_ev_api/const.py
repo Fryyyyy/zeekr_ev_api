@@ -36,6 +36,11 @@ SET_TRAVEL_PLAN_URL = "ms-charge-manage/api/v1.0/charge/setTravelPlan"
 JOURNEY_LOG_URL = "ms-vehicle-trail/v1.0/journalLog/trip/listForPage"
 TRIP_TRACKPOINTS_URL = "ms-vehicle-trail/v1.0/journalLog/trackpoint/list"
 
+# Default (connect, read) timeout in seconds applied to every HTTP request.
+# Prevents a hung request (e.g. a sleeping vehicle that never responds) from
+# blocking the caller indefinitely. Callers can override via ZeekrClient(timeout=...).
+REQUEST_TIMEOUT = (10, 30)
+
 COUNTRY_CODE = "AU"
 REGION_CODE = "SEA"
 

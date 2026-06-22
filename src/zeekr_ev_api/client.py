@@ -36,12 +36,17 @@ class ZeekrClient:
         vin_iv: str = "",
         session_data: dict | None = None,
         logger: logging.Logger | None = None,
+        timeout: tuple[float, float] | float | None = None,
     ) -> None:
         """
         Initializes the client.
         """
         self.session: requests.Session = requests.Session()
         self.password: str | None = password
+
+        # (connect, read) timeout in seconds applied to every request. Guards
+        # against a hung request (e.g. a sleeping vehicle) blocking the caller.
+        self.timeout = timeout if timeout is not None else const.REQUEST_TIMEOUT
 
         # Logger for this client (allows caller to inject their logger)
         self.logger = logger or logging.getLogger(__name__)
@@ -280,7 +285,7 @@ class ZeekrClient:
             req, self.hmac_access_key, self.hmac_secret_key
         )
         prepped = self.session.prepare_request(new_req)
-        resp = self.session.send(prepped)
+        resp = self.session.send(prepped, timeout=self.timeout)
         login_data = resp.json()
 
         if not login_data or not login_data.get("success", False):
