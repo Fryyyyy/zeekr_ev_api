@@ -11,6 +11,8 @@ import warnings
 from typing import Any, Dict, List
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 
@@ -37,6 +39,8 @@ class ZeekrClient:
         session_data: dict | None = None,
         logger: logging.Logger | None = None,
         timeout: tuple[float, float] | float | None = None,
+        max_retries: int | None = None,
+        retry_backoff: float | None = None,
     ) -> None:
         """
         Initializes the client.
@@ -47,6 +51,32 @@ class ZeekrClient:
         # (connect, read) timeout in seconds applied to every request. Guards
         # against a hung request (e.g. a sleeping vehicle) blocking the caller.
         self.timeout = timeout if timeout is not None else const.REQUEST_TIMEOUT
+
+        # Retry transient failures (connection drops, read timeouts, 429/5xx)
+        # with exponential backoff, honouring Retry-After. Only idempotent
+        # methods (GET/HEAD) are retried on a bad status or read timeout, so a
+        # command POST is never re-issued after the gateway may already have
+        # accepted it; a connection error (request never reached the server) is
+        # safe to retry for any method. Mounting on the session means every
+        # request — including the existing token-expiry relogin path — is
+        # covered without touching each call site.
+        self.max_retries = (
+            max_retries if max_retries is not None else const.MAX_RETRIES
+        )
+        self.retry_backoff = (
+            retry_backoff if retry_backoff is not None else const.RETRY_BACKOFF
+        )
+        retry = Retry(
+            total=self.max_retries,
+            backoff_factor=self.retry_backoff,
+            status_forcelist=const.RETRY_STATUS_FORCELIST,
+            allowed_methods=frozenset(["GET", "HEAD"]),
+            respect_retry_after_header=True,
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
         # Logger for this client (allows caller to inject their logger)
         self.logger = logger or logging.getLogger(__name__)

@@ -285,3 +285,53 @@ def test_request_timeout_override():
         timeout=5,
     )
     assert client.timeout == 5
+
+
+def _make_client(**kwargs):
+    return ZeekrClient(
+        username="test@example.com",
+        password="password",
+        hmac_access_key="key",
+        hmac_secret_key="secret",
+        password_public_key="pubkey",
+        prod_secret="prodsecret",
+        **kwargs,
+    )
+
+
+def test_retry_adapter_mounted_with_expected_policy():
+    """A urllib3 Retry is mounted on the session for http(s) with our policy."""
+    client = _make_client()
+
+    for scheme in ("https://x", "http://x"):
+        retry = client.session.get_adapter(scheme).max_retries
+        assert retry.total == const.MAX_RETRIES
+        assert retry.backoff_factor == const.RETRY_BACKOFF
+        assert tuple(retry.status_forcelist) == const.RETRY_STATUS_FORCELIST
+        # Only idempotent methods are retried; a command POST is never re-issued.
+        assert retry.allowed_methods == frozenset(["GET", "HEAD"])
+        assert retry.respect_retry_after_header is True
+        # A final bad status flows through to JSON parsing rather than raising.
+        assert retry.raise_on_status is False
+
+
+def test_retry_policy_overridable():
+    """max_retries / retry_backoff override the defaults."""
+    client = _make_client(max_retries=5, retry_backoff=1.5)
+
+    assert client.max_retries == 5
+    assert client.retry_backoff == 1.5
+    retry = client.session.get_adapter("https://x").max_retries
+    assert retry.total == 5
+    assert retry.backoff_factor == 1.5
+
+
+def test_retry_only_idempotent_methods_on_bad_status():
+    """GET/HEAD retry on 429/5xx; a command POST does not; 4xx never retries."""
+    retry = _make_client().session.get_adapter("https://x").max_retries
+
+    for status in const.RETRY_STATUS_FORCELIST:
+        assert retry.is_retry("GET", status) is True
+        assert retry.is_retry("POST", status) is False
+    # A normal 4xx is a real error, not transient — never retried.
+    assert retry.is_retry("GET", 404) is False
