@@ -192,6 +192,10 @@ class ZeekrClient:
         """
         if self.logged_in and not relogin:
             return
+        if relogin:
+            # The pre-login region lookup must not inherit a stale session
+            # authorization header from the expired session.
+            self.session.headers.pop("authorization", None)
         self._get_urls()
         self._check_user()
         self._do_login_request()
