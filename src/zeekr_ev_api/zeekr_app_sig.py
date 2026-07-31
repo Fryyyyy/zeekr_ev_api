@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import json
 import logging
+
+from .redact import redact_header_lines, redact_headers
 import time
 import uuid
 
@@ -203,9 +205,10 @@ def calculate_sig(request: PreparedRequest, secret: str) -> str:
 
     signature_base_string = "".join(sig_base_list)
 
-    log.debug("--- DEBUG: SIGNATURE BASE STRING ---")
-    log.debug(signature_base_string)
-    log.debug("-----------------------------------")
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("--- DEBUG: SIGNATURE BASE STRING ---")
+        log.debug(redact_header_lines(signature_base_string))
+        log.debug("-----------------------------------")
 
     # 6. Calculate HMAC-SHA256
     h = hmac.new(
@@ -244,6 +247,7 @@ def sign_request(request: PreparedRequest, secret: str) -> PreparedRequest:
     signature = calculate_sig(request, secret)
     request.headers["X-SIGNATURE"] = signature
 
-    log.debug(f"Request Headers: {request.headers}")
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug(f"Request Headers: {redact_headers(request.headers)}")
 
     return request

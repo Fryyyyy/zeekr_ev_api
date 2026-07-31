@@ -3,6 +3,8 @@ import datetime
 import hashlib
 import hmac
 import logging
+
+from .redact import redact_headers
 from typing import Dict
 
 from urllib.parse import urlparse
@@ -116,6 +118,7 @@ def generateHMAC(request: Request, access_key: str,
     request.headers["X-HMAC-DIGEST"] = body_digest
     request.headers["X-DATE"] = gmt_date
 
-    log.debug(f"Request Headers: {request.headers}")
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug(f"Request Headers: {redact_headers(request.headers)}")
 
     return request

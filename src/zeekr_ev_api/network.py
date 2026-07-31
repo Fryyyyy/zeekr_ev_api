@@ -4,6 +4,7 @@ import json
 
 from requests import Request
 from . import const, zeekr_app_sig, zeekr_hmac
+from .redact import redact_headers, safe_body
 from .exceptions import AuthException
 
 if TYPE_CHECKING:
@@ -11,14 +12,17 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-
 def _safe_json(resp, logger) -> Any:
     """Safely parse JSON response, logging errors."""
     try:
         return resp.json()
     except (json.JSONDecodeError, ValueError) as e:
         logger.error("Failed to decode JSON response: %s", e)
-        logger.error("Response status: %s, text: %s", resp.status_code, resp.text[:500] if resp.text else "(empty)")
+        logger.error(
+            "Response status: %s, body: %s",
+            getattr(resp, "status_code", "(unknown)"),
+            safe_body(getattr(resp, "text", None)),
+        )
         return {"success": False, "error": f"Invalid JSON response: {e}", "status_code": resp.status_code}
 
 
@@ -49,10 +53,11 @@ def customPost(client: "ZeekrClient", url: str, body: dict | None = None) -> Any
     resp = client.session.send(
         prepped, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
     )
-    logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
-    logger.debug("------ RESPONSE ------")
-    logger.debug(resp.text)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("------ HEADERS ------")
+        logger.debug(redact_headers(resp.headers))
+        logger.debug("------ RESPONSE ------")
+        logger.debug(safe_body(resp.text))
 
     return _safe_json(resp, logger)
 
@@ -69,10 +74,11 @@ def customGet(client: "ZeekrClient", url: str) -> Any:
     resp = client.session.send(
         prepped, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
     )
-    logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
-    logger.debug("------ RESPONSE ------")
-    logger.debug(resp.text)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("------ HEADERS ------")
+        logger.debug(redact_headers(resp.headers))
+        logger.debug("------ RESPONSE ------")
+        logger.debug(safe_body(resp.text))
 
     return _safe_json(resp, logger)
 
@@ -96,21 +102,23 @@ def appSignedPost(
 
     final = zeekr_app_sig.sign_request(prepped, client.prod_secret)
 
-    logger.debug("--- Signed Request Details ---")
-    logger.debug(f"Method: {final.method}")
-    logger.debug(f"URL: {final.url}")
-    logger.debug("Headers:")
-    for k, v in final.headers.items():
-        logger.debug(f"  {k}: {v}")
-    logger.debug(f"Body: {final.body or ''}")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("--- Signed Request Details ---")
+        logger.debug(f"Method: {final.method}")
+        logger.debug(f"URL: {final.url}")
+        logger.debug("Headers:")
+        for k, v in redact_headers(final.headers).items():
+            logger.debug(f"  {k}: {v}")
+        logger.debug(f"Body: {safe_body(final.body)}")
 
     resp = client.session.send(
         final, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
     )
-    logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
-    logger.debug("------ RESPONSE ------")
-    logger.debug(resp.text)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("------ HEADERS ------")
+        logger.debug(redact_headers(resp.headers))
+        logger.debug("------ RESPONSE ------")
+        logger.debug(safe_body(resp.text))
 
     result = _safe_json(resp, logger)
 
@@ -149,10 +157,11 @@ def appSignedGet(
     resp = client.session.send(
         final, timeout=getattr(client, "timeout", const.REQUEST_TIMEOUT)
     )
-    logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
-    logger.debug("------ RESPONSE ------")
-    logger.debug(resp.text)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("------ HEADERS ------")
+        logger.debug(redact_headers(resp.headers))
+        logger.debug("------ RESPONSE ------")
+        logger.debug(safe_body(resp.text))
 
     result = _safe_json(resp, logger)
 
