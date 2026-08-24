@@ -27,6 +27,7 @@ def mock_client():
         mock_const.LOGGED_IN_HEADERS = {"header": "value"}
         mock_const.REMOTECONTROLSTATE_URL = "remote/state"
         mock_const.VEHICLESTATUS_URL = "vehicle/status"
+        mock_const.VEHICLEVTMSTATUS_URL = const.VEHICLEVTMSTATUS_URL
         mock_const.VEHICLECHARGINGSTATUS_URL = "charging/status"
         mock_const.VEHLIST_URL = "veh/list"
         # Mock encryption to avoid AES errors with empty keys
@@ -67,6 +68,30 @@ def test_get_vehicle_status(mock_client):
         args, kwargs = mock_get.call_args
         # Since we mocked encryption to return 'encrypted_vin', check for that
         assert "encrypted_vin" in str(kwargs.get('headers', {}))
+
+def test_get_vehicle_vtm_status(mock_client):
+    mock_response = {
+        "success": True,
+        "data": {
+            "activeStatus": "1",
+            "currentTemperature": "2.0",
+            "vtmTsActive": "false",
+            "vtmModel": {
+                "setting": [{"temp": "3.0", "duration": "1440"}],
+            },
+        },
+    }
+
+    with patch("zeekr_ev_api.network.appSignedGet", return_value=mock_response) as mock_get:
+        status = mock_client.get_vehicle_vtm_status("VIN123")
+
+    assert status == mock_response["data"]
+    args, kwargs = mock_get.call_args
+    assert (
+        args[1]
+        == "https://mock.login.server/ms-vehicle-status/api/v1.0/vehicle/status/vtm"
+    )
+    assert kwargs["headers"]["X-VIN"] == "encrypted_vin"
 
 def test_get_vehicle_charging_status(mock_client):
     mock_response = {"success": True, "data": {"charging": True}}
@@ -118,17 +143,20 @@ def test_vehicle_wrapper_methods(mock_client):
 
     # Mock client methods
     mock_client.get_vehicle_status = MagicMock(return_value="status_ok")
+    mock_client.get_vehicle_vtm_status = MagicMock(return_value="vtm_status_ok")
     mock_client.get_vehicle_charging_status = MagicMock(return_value="charging_ok")
     mock_client.get_remote_control_state = MagicMock(return_value="remote_ok")
     mock_client.do_remote_control = MagicMock(return_value=True)
 
     assert vehicle.get_status() == "status_ok"
+    assert vehicle.get_vtm_status() == "vtm_status_ok"
     assert vehicle.get_charging_status() == "charging_ok"
     assert vehicle.get_remote_control_state() == "remote_ok"
     assert vehicle.do_remote_control("c", "s", {}) is True
 
     # Verify the vehicle wrapper calls the correct client methods
     mock_client.get_vehicle_status.assert_called_with("VIN123")
+    mock_client.get_vehicle_vtm_status.assert_called_with("VIN123")
     mock_client.get_vehicle_charging_status.assert_called_with("VIN123")
     mock_client.get_remote_control_state.assert_called_with("VIN123")
     mock_client.do_remote_control.assert_called_with("VIN123", "c", "s", {})
