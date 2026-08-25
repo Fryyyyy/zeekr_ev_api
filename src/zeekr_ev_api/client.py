@@ -459,6 +459,28 @@ class ZeekrClient:
 
         return vehicle_status_block.get("data", {})
 
+    def get_vehicle_vtm_status(self, vin: str) -> Dict[str, Any]:
+        """
+        Fetches the VTM status for a specific vehicle.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        headers = self.logged_in_headers.copy()
+        headers["X-VIN"] = self._get_encrypted_vin(vin)
+
+        vehicle_vtm_status_block = network.appSignedGet(
+            self,
+            f"{self.region_login_server}{const.VEHICLEVTMSTATUS_URL}",
+            headers=headers,
+        )
+        if not vehicle_vtm_status_block.get("success", False):
+            raise ZeekrException(
+                f"Failed to get vehicle VTM status: {vehicle_vtm_status_block}"
+            )
+
+        return vehicle_vtm_status_block.get("data", {})
+
     def get_vehicle_charging_status(self, vin: str) -> Dict[str, Any]:
         """
         Fetches the charging status for a specific vehicle.
@@ -823,6 +845,12 @@ class Vehicle:
         Fetches the vehicle status.
         """
         return self._client.get_vehicle_status(self.vin)
+
+    def get_vtm_status(self) -> Any:
+        """
+        Fetches the vehicle VTM status.
+        """
+        return self._client.get_vehicle_vtm_status(self.vin)
 
     def get_charging_status(self) -> Any:
         """
